@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Solar JAR Scanner — check your Minecraft server for the Solar infector</title>
+<meta name="description" content="Free, client-side scanner for the 'Solar' JAR infector campaign hitting Minecraft server networks (documented Feb-Aug 2026). Upload your plugin/server JARs, nothing leaves your browser." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --border: #2a2e38; --text: #e8e9ec; --text-dim: #9aa0ab;
+    --accent: #4fd1a5; --danger: #f0575c; --warn: #e8b339; --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 20px 96px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  .sub { color: var(--text-dim); margin: 0 0 28px; font-size: 15px; }
+  .badge { display: inline-block; font: 11px var(--mono); letter-spacing: .04em; text-transform: uppercase;
+    color: var(--accent); border: 1px solid var(--accent); border-radius: 20px; padding: 3px 10px; margin-bottom: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; margin-bottom: 20px; }
+  .drop { border: 2px dashed var(--border); border-radius: 12px; padding: 36px 20px; text-align: center; cursor: pointer;
+    transition: border-color .15s, background .15s; margin-bottom: 20px; }
+  .drop:hover, .drop.over { border-color: var(--accent); background: rgba(79,209,165,.06); }
+  .drop input { display: none; }
+  .drop p { margin: 0; color: var(--text-dim); }
+  #results { margin-top: 8px; }
+  .result-row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .result-row:last-child { border-bottom: none; }
+  .icon { font-size: 18px; line-height: 1.4; flex-shrink: 0; }
+  .fname { font: 13px var(--mono); word-break: break-all; }
+  .status { font-size: 13px; margin-top: 2px; }
+  .status.clean { color: var(--accent); }
+  .status.hit { color: var(--danger); font-weight: 600; }
+  .status.err { color: var(--warn); }
+  .progress { font: 13px var(--mono); color: var(--text-dim); margin: 10px 0; }
+  h2 { font-size: 17px; margin: 0 0 10px; }
+  .card p, .card li { color: var(--text-dim); font-size: 14px; }
+  code, pre { font: 13px var(--mono); }
+  pre { background: #0b0d11; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+  a { color: var(--accent); }
+  .foot { color: var(--text-dim); font-size: 12.5px; margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .hitbox { background: rgba(240,87,92,.08); border: 1px solid var(--danger); border-radius: 10px; padding: 16px 18px; margin: 16px 0; }
+</style>
+</head>
+<body>
+<main>
+  <div class="badge">free · client-side · no upload</div>
+  <h1>🛡️ Solar JAR Scanner</h1>
+  <p class="sub">Checks your Minecraft plugin/server JARs for the "Solar" infector — a real, undocumented
+    JAR-injection campaign that hit at least 5 German Minecraft networks between Feb–Aug 2026.
+    Everything runs in your browser. Your JARs are never uploaded anywhere.</p>
+
+  <div class="card">
+    <h2>What this is</h2>
+    <p>A researcher who goes by <b>Plattio</b> found their Minecraft network compromised by a JAR infector
+      with no public write-up anywhere — not on PaperMC forums, not in any vendor blog, not in
+      MCAntiMalware's signatures — and published the full technical breakdown so other operators could
+      check their own systems. This tool automates the signature check from that write-up.
+      <a href="https://gist.github.com/Plattio/d40f53c2e9f962746f3c01a1a244b9e4" target="_blank" rel="noreferrer">Full original write-up →</a></p>
+    <p>It looks for constant-pool strings that only appear once a JAR's class files are actually
+      extracted (a plain <code>grep</code> on the .jar itself finds nothing — the classes are DEFLATE-compressed)
+      plus the zero-width-space filename trick the loader uses for persistence in <code>./logs</code>.</p>
+  </div>
+
+  <div class="drop" id="drop">
+    <input type="file" id="fileInput" multiple accept=".jar" />
+    <p>Drop your plugin JARs (and your server core / paperclip jar — this campaign hides in both) here,
+      or click to choose files</p>
+  </div>
+
+  <div class="progress" id="progress" hidden></div>
+  <div id="results"></div>
+  <div id="hitSection" hidden></div>
+
+  <div class="card">
+    <h2>Prefer not to upload anything, even locally?</h2>
+    <p>Run this directly on your server instead — same three checks, straight from the original write-up:</p>
+    <pre># 1. Persistence outside the plugin folder (survives a full plugin wipe)
+find /path/to/server -name "*$(printf '\xe2\x80\x8b')" -ls
+
+# 2. Signatures on EXTRACTED classes (a plain grep on the .jar finds nothing)
+unzip -o plugin.jar -d /tmp/extracted &amp;&amp; grep -ral \
+  "czBsYXIubmV0\|cC5Bc3luY1RpbWluZ3M=\|bmV0LnMwbGFyLlNvbGFyTG9hZGVy" /tmp/extracted
+
+# 3. Orphaned 0-byte temp JARs
+find /tmp /var/tmp -maxdepth 1 -name '*.jar' -size 0</pre>
+  </div>
+
+  <div class="card">
+    <h2>What this does NOT check</h2>
+    <p>This is a signature check against one specific, documented campaign — not a general malware
+      scanner. It won't catch a variant that changes its strings/passphrase, and it doesn't do the
+      write-up's deeper "Layer 2" structural bytecode analysis (nop-padding, shifted debug tables).
+      A clean result here is real evidence, not a guarantee. If you find a hit, read the full
+      write-up before doing anything else — a plugin swap alone does not fix this.</p>
+  </div>
+
+  <div class="foot">
+    Detection logic and all technical credit: <a href="https://gist.github.com/Plattio/d40f53c2e9f962746f3c01a1a244b9e4" target="_blank" rel="noreferrer">Plattio's original write-up</a>.
+    This page just automates the signature check in-browser. Not affiliated with Mojang, Microsoft, or PaperMC.
+    Built by <a href="https://subies.app" target="_blank" rel="noreferrer">the person behind Subies</a> — an unrelated captioning tool, mentioned only so you know who runs this page.
+  </div>
+</main>
+
+<script src="jszip.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  // Signatures verbatim from the write-up's "Layer 1 — strings" section —
+  // base64-encoded because that's how they appear in the constant pool
+  // (the literal string "s0lar" appears nowhere in an infected class).
+  const SIGNATURES = {
+    "czBsYXIubmV0": "s0lar.net",
+    "aHR0cHM6Ly9zMGxhci5uZXQvcm91dGVzLzAvZC5waHA=": "https://s0lar.net/routes/0/d.php",
+    "bmV0LnMwbGFyLlNvbGFyTG9hZGVy": "net.s0lar.SolarLoader",
+    "cC5Bc3luY1RpbWluZ3M=": "p.AsyncTimings",
+  };
+  const ZWSP = "​";
+
+  const drop = document.getElementById("drop");
+  const fileInput = document.getElementById("fileInput");
+  const results = document.getElementById("results");
+  const progress = document.getElementById("progress");
+  const hitSection = document.getElementById("hitSection");
+
+  drop.addEventListener("click", () => fileInput.click());
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("over");
+    handleFiles(e.dataTransfer.files);
+  });
+  fileInput.addEventListener("change", (e) => handleFiles(e.target.files));
+
+  // Read a Uint8Array as a raw latin1 string so indexOf can find ASCII
+  // substrings inside binary class-file bytes — the same thing `grep -a`
+  // does when it treats a binary file as text.
+  function bytesToLatin1(bytes) {
+    let s = "";
+    const chunk = 32768;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return s;
+  }
+
+  async function scanJar(file) {
+    const row = document.createElement("div");
+    row.className = "result-row";
+    row.innerHTML = `<span class="icon">⏳</span><div><div class="fname">${file.name}</div><div class="status">scanning…</div></div>`;
+    results.appendChild(row);
+    const statusEl = row.querySelector(".status");
+    const iconEl = row.querySelector(".icon");
+
+    try {
+      const buf = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(buf);
+      const hits = [];
+
+      // Check 1: zero-width-space in any entry filename (the ./logs persistence trick)
+      for (const path of Object.keys(zip.files)) {
+        if (path.includes(ZWSP)) hits.push({ type: "filename", detail: `entry name contains a zero-width space: ${JSON.stringify(path)}` });
+      }
+
+      // Check 2: signature strings on every extracted class file
+      const entries = Object.values(zip.files).filter((f) => !f.dir && f.name.endsWith(".class"));
+      for (const entry of entries) {
+        const bytes = await entry.async("uint8array");
+        const text = bytesToLatin1(bytes);
+        for (const [b64, meaning] of Object.entries(SIGNATURES)) {
+          if (text.includes(b64)) hits.push({ type: "signature", detail: `${entry.name} contains "${b64}" (${meaning})` });
+        }
+      }
+
+      if (hits.length > 0) {
+        iconEl.textContent = "🚨";
+        statusEl.className = "status hit";
+        statusEl.textContent = `${hits.length} match(es) — see below`;
+        const box = document.createElement("div");
+        box.className = "hitbox";
+        box.innerHTML = `<b>🚨 ${file.name}</b> — possible Solar infection:<ul>${hits.map((h) => `<li>${h.detail}</li>`).join("")}</ul>
+          <p><b>Do not delete-and-forget.</b> Read the full write-up's "What a plugin replacement does not fix" section before doing anything else — the persistence and the running process both survive a naive cleanup.</p>`;
+        hitSection.hidden = false;
+        hitSection.appendChild(box);
+      } else {
+        iconEl.textContent = "✅";
+        statusEl.className = "status clean";
+        statusEl.textContent = `clean — scanned ${entries.length} class file(s), 0 signature matches`;
+      }
+    } catch (e) {
+      iconEl.textContent = "⚠️";
+      statusEl.className = "status err";
+      statusEl.textContent = `couldn't read this as a JAR: ${e.message}`;
+    }
+  }
+
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList).filter((f) => f.name.toLowerCase().endsWith(".jar"));
+    if (files.length === 0) return;
+    progress.hidden = false;
+    for (let i = 0; i < files.length; i++) {
+      progress.textContent = `Scanning ${i + 1} / ${files.length}: ${files[i].name}`;
+      await scanJar(files[i]);
+    }
+    progress.textContent = `Done — scanned ${files.length} JAR(s).`;
+  }
+})();
+</script>
+</body>
+</html>
