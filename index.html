@@ -61,6 +61,9 @@
     <p>It looks for constant-pool strings that only appear once a JAR's class files are actually
       extracted (a plain <code>grep</code> on the .jar itself finds nothing — the classes are DEFLATE-compressed)
       plus the zero-width-space filename trick the loader uses for persistence in <code>./logs</code>.</p>
+    <p>Don't take "nothing gets uploaded" on faith —
+      <a href="https://github.com/janibert1/mc-jar-scanner" target="_blank" rel="noreferrer">the full source is on GitHub</a>,
+      or just open your browser's Network tab while you use it.</p>
   </div>
 
   <div class="drop" id="drop">
